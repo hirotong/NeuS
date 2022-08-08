@@ -34,12 +34,8 @@ class SDFNetwork(nn.Module):
         self.skip_in = skip_in
         self.scale = scale
 
-        for l in range(0, self.num_layers - 1):
-            if l + 1 in self.skip_in:
-                out_dim = dims[l + 1] - dims[0]
-            else:
-                out_dim = dims[l + 1]
-
+        for l in range(self.num_layers - 1):
+            out_dim = dims[l + 1] - dims[0] if l + 1 in self.skip_in else dims[l + 1]
             lin = nn.Linear(dims[l], out_dim)
 
             if geometric_init:
@@ -65,7 +61,7 @@ class SDFNetwork(nn.Module):
             if weight_norm:
                 lin = nn.utils.weight_norm(lin)
 
-            setattr(self, "lin" + str(l), lin)
+            setattr(self, f"lin{str(l)}", lin)
 
         self.activation = nn.Softplus(beta=100)
 
@@ -75,8 +71,8 @@ class SDFNetwork(nn.Module):
             inputs = self.embed_fn_fine(inputs)
 
         x = inputs
-        for l in range(0, self.num_layers - 1):
-            lin = getattr(self, "lin" + str(l))
+        for l in range(self.num_layers - 1):
+            lin = getattr(self, f"lin{str(l)}")
 
             if l in self.skip_in:
                 x = torch.cat([x, inputs], 1) / np.sqrt(2)
@@ -133,14 +129,14 @@ class RenderingNetwork(nn.Module):
 
         self.num_layers = len(dims)
 
-        for l in range(0, self.num_layers - 1):
+        for l in range(self.num_layers - 1):
             out_dim = dims[l + 1]
             lin = nn.Linear(dims[l], out_dim)
 
             if weight_norm:
                 lin = nn.utils.weight_norm(lin)
 
-            setattr(self, "lin" + str(l), lin)
+            setattr(self, f"lin{str(l)}", lin)
 
         self.relu = nn.ReLU()
 
@@ -159,8 +155,8 @@ class RenderingNetwork(nn.Module):
 
         x = rendering_input
 
-        for l in range(0, self.num_layers - 1):
-            lin = getattr(self, "lin" + str(l))
+        for l in range(self.num_layers - 1):
+            lin = getattr(self, f"lin{str(l)}")
 
             x = lin(x)
 

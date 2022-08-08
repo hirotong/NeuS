@@ -9,8 +9,8 @@ parser.add_argument('scenedir', type=str,
                     help='input scene directory')
 args = parser.parse_args()
 
-if args.match_type != 'exhaustive_matcher' and args.match_type != 'sequential_matcher':
-	print('ERROR: matcher type ' + args.match_type + ' is not valid.  Aborting')
+if args.match_type not in ['exhaustive_matcher', 'sequential_matcher']:
+	print(f'ERROR: matcher type {args.match_type} is not valid.  Aborting')
 	sys.exit()
 
 if __name__=='__main__':

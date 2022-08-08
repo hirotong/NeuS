@@ -26,7 +26,7 @@ def extract_fields(bound_min, bound_max, resolution, query_func):
 
 
 def extract_geometry(bound_min, bound_max, resolution, threshold, query_func):
-    print('threshold: {}'.format(threshold))
+    print(f'threshold: {threshold}')
     u = extract_fields(bound_min, bound_max, resolution, query_func)
     vertices, triangles = mcubes.marching_cubes(u, threshold)
     b_max_np = bound_max.detach().cpu().numpy()
@@ -64,9 +64,7 @@ def sample_pdf(bins, weights, n_samples, det=False):
     denom = (cdf_g[..., 1] - cdf_g[..., 0])
     denom = torch.where(denom < 1e-5, torch.ones_like(denom), denom)
     t = (u - cdf_g[..., 0]) / denom
-    samples = bins_g[..., 0] + t * (bins_g[..., 1] - bins_g[..., 0])
-
-    return samples
+    return bins_g[..., 0] + t * (bins_g[..., 1] - bins_g[..., 0])
 
 
 class NeuSRenderer:
@@ -172,8 +170,7 @@ class NeuSRenderer:
         weights = alpha * torch.cumprod(
             torch.cat([torch.ones([batch_size, 1]), 1. - alpha + 1e-7], -1), -1)[:, :-1]
 
-        z_samples = sample_pdf(z_vals, weights, n_importance, det=True).detach()
-        return z_samples
+        return sample_pdf(z_vals, weights, n_importance, det=True).detach()
 
     def cat_z_vals(self, rays_o, rays_d, z_vals, new_z_vals, sdf, last=False):
         batch_size, n_samples = z_vals.shape

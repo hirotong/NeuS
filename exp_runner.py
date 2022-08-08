@@ -23,11 +23,9 @@ class Runner:
 
         # Configuration
         self.conf_path = conf_path
-        f = open(self.conf_path)
-        conf_text = f.read()
-        conf_text = conf_text.replace('CASE_NAME', case)
-        f.close()
-
+        with open(self.conf_path) as f:
+            conf_text = f.read()
+            conf_text = conf_text.replace('CASE_NAME', case)
         self.conf = ConfigFactory.parse_string(conf_text)
         self.conf['dataset.data_dir'] = self.conf['dataset.data_dir'].replace('CASE_NAME', case)
         self.base_exp_dir = self.conf['general.base_exp_dir']
@@ -80,15 +78,18 @@ class Runner:
         latest_model_name = None
         if is_continue:
             model_list_raw = os.listdir(os.path.join(self.base_exp_dir, 'checkpoints'))
-            model_list = []
-            for model_name in model_list_raw:
-                if model_name[-3:] == 'pth' and int(model_name[5:-4]) <= self.end_iter:
-                    model_list.append(model_name)
+            model_list = [
+                model_name
+                for model_name in model_list_raw
+                if model_name[-3:] == 'pth'
+                and int(model_name[5:-4]) <= self.end_iter
+            ]
+
             model_list.sort()
             latest_model_name = model_list[-1]
 
         if latest_model_name is not None:
-            logging.info('Find checkpoint: {}'.format(latest_model_name))
+            logging.info(f'Find checkpoint: {latest_model_name}')
             self.load_checkpoint(latest_model_name)
 
         # Backup codes and configs for debug
