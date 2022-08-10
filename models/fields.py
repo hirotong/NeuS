@@ -5,7 +5,7 @@ import numpy as np
 from models.embedder import get_embedder
 
 
-# This implementation is borrowed from IDR: https://github.com/lioryariv/idr
+
 class SDFNetwork(nn.Module):
     def __init__(self,
                  d_in,
