@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": ["--mode", "train", "--conf", "./confs/insect.conf", "--case", "insect_randomview"]
+            "args": ["--mode", "train", "--conf", "./confs/insect_wmask.conf", "--case", "insect_randomview"]
         }
     ]
 }
