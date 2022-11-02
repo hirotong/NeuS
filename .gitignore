@@ -154,3 +154,6 @@ data
 public_data
 exp
 tmp
+
+*.out
+*.gz
