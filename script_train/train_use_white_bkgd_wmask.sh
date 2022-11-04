@@ -2,6 +2,7 @@
 
 for i in `cat list.txt`
 do
-CUDA_VISIBLE_DEVICES=1 python exp_runner.py --conf confs/insect_white_bkgd.conf --case $1/wobox &&
-python exp_runner.py --conf confs/insect_white_bkgd.conf --case $1/wobox --mode validate_mesh
+echo $i
+CUDA_VISIBLE_DEVICES=1 python exp_runner.py --conf confs/insect_use_white_bkgd_wmask.conf --case $i/wobox &&
+python exp_runner.py --conf confs/insect_white_bkgd.conf --case $i/wobox --mode validate_mesh
 done
