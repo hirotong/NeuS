@@ -23,5 +23,5 @@ echo "job name is $SLURM_JOB_NAME"
 module load miniconda3
 conda activate pytorch3d
 python exp_runner.py --conf confs/insect_white_bkgd.conf --case $1/wobox &&
-python exp_runner.py --conf confs/insect_white_bkgd.conf --case $1/wobox --mode validate_mesh
+python exp_runner.py --conf confs/insect_white_bkgd.conf --case $1/wobox --mode validate_mesh -r 512
 sleep 120

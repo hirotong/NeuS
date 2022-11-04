@@ -80,7 +80,7 @@ class Runner:
 
         # Load checkpoint
         latest_model_name = None
-        if is_continue:
+        if is_continue or self.mode[:5] != 'train':
             model_list_raw = os.listdir(os.path.join(self.base_exp_dir, 'checkpoints'))
             model_list = []
             for model_name in model_list_raw:
@@ -328,6 +328,9 @@ class Runner:
         return img_fine
 
     def validate_mesh(self, world_space=False, resolution=64, threshold=0.0):
+        if os.path.exists(os.path.join(self.base_exp_dir, 'meshes', "{:0>8d}_{:d}_{:2f}.ply".format(self.iter_step, resolution, threshold))):
+            return
+        
         bound_min = torch.tensor(self.dataset.object_bbox_min, dtype=torch.float32)
         bound_max = torch.tensor(self.dataset.object_bbox_max, dtype=torch.float32)
 
@@ -384,6 +387,7 @@ if __name__ == '__main__':
     parser.add_argument('--is_continue', default=False, action="store_true")
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--case', type=str, default='')
+    parser.add_argument('--resolution', '-r', type=int, dest='resolution',default=256)
 
     args = parser.parse_args()
 
@@ -393,7 +397,7 @@ if __name__ == '__main__':
     if args.mode == 'train':
         runner.train()
     elif args.mode == 'validate_mesh':
-        runner.validate_mesh(world_space=False, resolution=512, threshold=args.mcube_threshold)
+        runner.validate_mesh(world_space=False, resolution=args.resolution, threshold=args.mcube_threshold)
     elif args.mode.startswith('interpolate'):  # Interpolate views given two image indices
         _, img_idx_0, img_idx_1 = args.mode.split('_')
         img_idx_0 = int(img_idx_0)
