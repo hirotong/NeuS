@@ -16,12 +16,12 @@
  
 #The below is what you want to actually run/do
 
-echo "Dataset $1"
+echo "Config $1 Dataset $2"
 
 echo "number of cores is $SLURM_NTASKS"
 echo "job name is $SLURM_JOB_NAME"
 module load miniconda3
 conda activate pytorch3d
-python exp_runner.py --conf confs/insect_use_white_bkgd_wmask_siren.conf --case $1 &&
-python exp_runner.py --conf confs/insect_use_white_bkgd_wmask_siren.conf --case $1 --mode validate_mesh -r 512
+python exp_runner.py --conf $1 --case $2 &&
+python exp_runner.py --conf $1 --case $2 --mode validate_mesh -r 512
 sleep 120

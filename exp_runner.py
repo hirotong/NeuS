@@ -13,7 +13,7 @@ from icecream import ic
 from tqdm import tqdm
 from pyhocon import ConfigFactory
 from models.dataset import Dataset
-from models.dataset_blender import Blender
+from models.dataset_blender import Blender, Aruco
 from models.fields import RenderingNetwork, SingleVarianceNetwork, NeRF #SDFNetwork,
 from models.SIREN import SDFNetwork
 from models.renderer import NeuSRenderer
@@ -35,8 +35,11 @@ class Runner:
         self.base_exp_dir = self.conf['general.base_exp_dir']
         os.makedirs(self.base_exp_dir, exist_ok=True)
         # self.dataset = Dataset(self.conf['dataset'])
-        self.dataset = Blender(**self.conf['dataset'])
-        self.iter_step = 0
+        if 'sample' in case:
+            self.dataset = Aruco(**self.conf['dataset'])
+        else:
+            self.dataset = Blender(**self.conf['dataset'])
+        self.iter_step = 0  
 
         # Training parameters
         self.end_iter = self.conf.get_int('train.end_iter')

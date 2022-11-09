@@ -315,6 +315,307 @@ class Blender(Database):
         K = self.intrinsics
 
         return torch.LongTensor([index]), poses_gt, poses_aruco, K, mask
+    
+class Aruco(Database):
+    def __init__(
+        self,
+        root,
+        camera_model=None,
+        half_res=False,
+        mode="train",
+        mesh_gt=None,
+        pointcloud_gt=None,
+        use_gt_pose=False,
+        regenerate=False,
+        resolution=128,
+        device="cuda",
+        
+    ):
+        super().__init__()
+
+        self.case = root.split(os.sep)[-2]
+        assert mode.lower() in ["train", "valid", "test"]
+        self.mode = mode
+        self.use_gt_pose = use_gt_pose
+        self.half_res = half_res
+        self.root = os.path.expanduser(root)
+        self.device = torch.device(device=device)
+        # self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        self.scale = torch.tensor([1.0])
+
+        with open(os.path.join(self.root, "transforms_{}.json".format(mode)), "r") as fp:
+            metas_aruco = json.load(fp)
+        with open(os.path.join(self.root, "transforms_{}_gt.json".format(mode)), "r") as fp:
+            metas_gt = json.load(fp)
+        # with open(os.path.join(self.root, 'transforms_{}.json'.format(mode)), 'r') as fp:
+        #     colmap = json.load(fp)
+        self.metas_gt = metas_gt
+        self.metas_aruco = metas_aruco
+        self.imgs = None
+        self.masks = None
+        self.poses = None
+        self.poses_aruco = None
+        self.params = None
+        self._load_data()
+        self.poses_aruco = self._load_pose(metas_aruco)
+        self.poses_gt = self._load_pose(metas_gt)
+        self.n_images = len(self.imgs)
+        self.bbox_path = os.path.join(".", "data", f"visual_hull_{self.case}.obj")
+        self.regenerate = False  # not os.path.exists(self.bbox_path) or regenerate
+        if self.regenerate:
+            self._compute_visual_hull(resolution=resolution)
+
+        if camera_model:
+            self._load_camera_model(camera_model)
+
+        self.render_poses = torch.stack(
+            [pose_spherical(angle, -30.0, 4.0) for angle in np.linspace(-180, 180, 40 + 1)[:-1]], 0
+        )
+        self.indices = range(len(self.imgs))
+
+        if use_gt_pose:
+            self.poses = self.poses_gt
+        else:
+            self.poses = self.poses_aruco
+            
+        if mesh_gt is not None:
+            import trimesh
+            try:
+                self.mesh_gt = trimesh.load_mesh(os.path.expanduser(mesh_gt), process=False)
+                self.pointcloud_gt = self.mesh_gt.sample(100000).astype(np.float32)
+            except:
+                self.mesh_gt = None
+                self.pointcloud_gt = None
+                # raise FileNotFoundError("{:s} doesn't exist.".format(mesh_gt))
+            
+        if pointcloud_gt is not None:
+            from utils import io
+            try:
+                self.pointcloud_gt = io.load_pointcloud(os.path.expanduser(pointcloud_gt)).astype(np.float32)
+            except:
+                self.pointcloud_gt = None
+                # raise FileNotFoundError("{:s} doesn't exist.".format(os.path.expanduser(pointcloud_gt)))
+
+        print("Load data: End")
+
+    def __len__(self):
+        return len(self.imgs)
+
+    def _load_pose(self, meta_data: Dict):
+        poses = []
+        frames = meta_data["frames"]
+        frames = sorted(frames, key=lambda x: int(x["file_path"].split("/")[-1].split(".")[0]))
+        for frame in tqdm(frames):
+            fname = os.path.join(self.root, "train", frame["file_path"])
+            poses.append(np.array(frame["transform_matrix"]))
+        poses = (np.array(poses)).astype(np.float32)
+
+        return torch.from_numpy(poses).to(self.device)
+
+    def _load_data(self):
+        imgs = []
+        masks = []
+        poses = []
+        frames = self.metas_gt["frames"]
+        frames = sorted(frames, key=lambda x: int(x["file_path"].split("/")[-1].split(".")[0]))
+        for frame in tqdm(frames, unit='images'):
+            fname = os.path.join(self.root, frame["file_path"])
+            img, mask = load_rgba(fname)
+            imgs.append(img)
+            masks.append(mask)
+            poses.append(np.array(frame["transform_matrix"]))
+        imgs = np.stack(imgs, axis=0).astype(np.float32)
+        masks = np.stack(masks, axis=0).astype(np.float32)
+        poses = (np.array(poses)).astype(np.float32)
+
+        self.intrinsics = torch.from_numpy(np.load(os.path.join(self.root, "intrinsic.npy"))).float().to(self.device)
+
+        H, W = imgs[0].shape[:2]
+
+        if self.half_res:
+            H, W = H // 2, W // 2
+            self.intrinsics = self.intrinsics / 2.0
+            self.intrinsics[2, 2] = 1.0
+
+            imgs_half_res = np.zeros([imgs.shape[0], H, W, imgs.shape[-1]])
+            masks_half_res = np.zeros([masks.shape[0], H, W, masks.shape[-1]])
+            for i, img in enumerate(imgs):
+                imgs_half_res[i] = cv2.resize(img, (W, H), interpolation=cv2.INTER_AREA)
+                masks_half_res[i] = cv2.resize(
+                    masks[i], (W, H), interpolation=cv2.INTER_NEAREST
+                ).reshape([H, W, 1])
+            imgs = imgs_half_res
+            masks = masks_half_res
+
+        self.intrinsics_inv = torch.inverse(self.intrinsics)
+        self.imgs = torch.from_numpy(imgs).to(self.device)
+        self.masks = torch.from_numpy(masks).to(self.device)
+        # self.poses = torch.from_numpy(poses).to(self.device)
+        self.H = H
+        self.W = W
+        # transform from right-up-backward to right-down-forward
+        self.transform = torch.Tensor([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
+
+    def _load_camera_model(self, camera_model):
+
+        model = RefineModel("./bbox/asymmetric_box.obj", None, self.n_images)
+        state_dict = torch.load(camera_model)
+        model.load_state_dict(state_dict, strict=False)
+
+        self.scale = model.scale.detach()
+        colmap_poses = model.get_camera_poses().detach()
+
+        # self.poses = colmap_poses.clone().to(self.device)
+        self.colmap_poses = colmap_poses.clone().to(self.device)
+
+    def gen_rays_at(self, img_idx, resolution_level=1):
+        """
+        Generate rays at world space from one camera.
+        """
+        l = resolution_level
+        tx = torch.linspace(0, self.W - 1, self.W // l)
+        ty = torch.linspace(0, self.H - 1, self.H // l)
+        xx, yy = torch.meshgrid(tx, ty)
+        xx = xx.t()
+        yy = yy.t()
+
+        p = torch.stack([xx, yy, torch.ones_like(xx)], dim=-1)  # H, W, 3
+        p = torch.matmul(self.intrinsics_inv[None, None], p[..., None])  # H, W, 3, 1
+        # ? from right-up-backward to right-down-forward
+        # p = torch.matmul(self.transform[None, None], p).squeeze()  # H, W, 3
+        rays_d = torch.matmul(
+            self.poses[img_idx, None, None, :3, :3], p
+        ).squeeze()  # H, W, 3
+        rays_d = F.normalize(rays_d, p=2, dim=-1)
+        rays_o = self.poses[img_idx, None, None, :3, 3].expand(rays_d.shape)
+        return rays_o, rays_d
+
+    def gen_random_rays_at(self, img_idx, batch_size):
+        """
+        Generate random rays at world space from one camera.
+        """
+        tx = torch.randint(low=0, high=self.W, size=[batch_size])
+        ty = torch.randint(low=0, high=self.H, size=[batch_size])
+        color = self.imgs[img_idx][(ty, tx)]  # batch_size, 3
+        mask = self.masks[img_idx][(ty, tx)]  # batch_size, 1
+        p = torch.stack([tx, ty, torch.ones_like(tx)], dim=-1).float()  # batch_size, 3
+        p = torch.matmul(self.intrinsics_inv[None], p[..., None])  # batch_size, 3, 1
+        # p = torch.matmul(self.transform[None], p)
+        rays_d = torch.matmul(self.poses[img_idx, None, :3, :3], p).squeeze()
+        rays_d = F.normalize(rays_d, p=2, dim=-1)
+        rays_o = self.poses[img_idx, None, :3, 3].expand(rays_d.shape)  # batch_size, 3
+
+        return torch.cat([rays_o, rays_d, color, mask], dim=-1).float()  # batch_size, 10
+
+    def gen_rays_between(self, idx_0, idx_1, ratio, resolution_level=1):
+        pass
+
+    def near_far_from_sphere(self, rays_o, rays_d):
+        """
+        Get the near and far intersections for each ray on the sphere.
+        """
+        # ?
+        a = torch.sqrt(torch.sum(rays_d ** 2, dim=-1, keepdim=True))
+        b = 2.0 * torch.sum(rays_o * rays_d, dim=-1, keepdim=True)
+        mid = 0.5 * (-b) / a
+        near = mid - 1.0
+        far = mid + 1.0
+        return near, far
+
+    def image_at(self, idx, resolution_level=1):
+        img = (self.imgs[idx].detach().cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
+        return cv2.resize(img, (self.W // resolution_level, self.H // resolution_level))
+
+    def _compute_visual_hull(self, resolution=512):
+        """
+        Compute a visual hull from object sihlouette.
+        """
+        min_x, max_x, min_y, max_y, min_z, max_z = -2, 2, -2, 2, -2, 2
+        yy, xx, zz = np.meshgrid(
+            np.linspace(min_y, max_y, resolution),
+            np.linspace(min_x, max_x, resolution),
+            np.linspace(min_z, max_z, resolution),
+        )
+
+        coord = np.concatenate(
+            [xx[..., None], yy[..., None], zz[..., None]], axis=-1
+        )  # res x res x res x 3
+        volume = -np.ones_like(xx)
+        intrinsics = self.intrinsics.detach().cpu().numpy()
+
+        for i, (mask, pose) in enumerate(zip(self.masks, self.poses)):
+            print(f"Process {i+1}/{len(self.imgs)} images")
+            mask = mask.detach().cpu().numpy()
+            pose = pose.detach().cpu().numpy()
+            rot = np.linalg.inv(pose[:3, :3])
+
+            coord_cam = coord - pose[:3, 3].reshape(1, 1, 1, 3)
+            x_cam = np.sum(rot[0, :3].reshape(1, 1, 1, 3) * coord_cam, axis=-1)
+            y_cam = -np.sum(rot[1, :3].reshape(1, 1, 1, 3) * coord_cam, axis=-1)
+            z_cam = -np.sum(rot[2, :3].reshape(1, 1, 1, 3) * coord_cam, axis=-1)
+            assert np.all(z_cam > 0)
+
+            coord_cam = np.concatenate(
+                [x_cam[..., None], y_cam[..., None], z_cam[..., None]], axis=-1
+            )
+            x_img = np.sum(intrinsics[0, :3].reshape(1, 1, 1, 3) * coord_cam, axis=-1)
+            y_img = np.sum(intrinsics[1, :3].reshape(1, 1, 1, 3) * coord_cam, axis=-1)
+            z_img = np.sum(intrinsics[2, :3].reshape(1, 1, 1, 3) * coord_cam, axis=-1)
+
+            x_img /= z_img
+            y_img /= z_img
+
+            x_ind = np.logical_and(x_img >= 0, x_img < self.W - 0.5)
+            y_ind = np.logical_and(y_img >= 0, y_img < self.H - 0.5)
+            im_ind = np.logical_and(x_ind, y_ind)
+
+            x_img_id = np.round(x_img[im_ind]).astype(np.int32)
+            y_img_id = np.round(y_img[im_ind]).astype(np.int32)
+
+            mask_ind = mask[y_img_id, x_img_id].squeeze()
+
+            volume_ind = im_ind.copy()
+            volume_ind[im_ind == 1] = mask_ind
+
+            volume[volume_ind == 0] = 1
+
+            print(f"Occupied voxel {im_ind.sum() / resolution ** 3 * 100:.2f}%")
+
+        vertex, faces, normals, _ = measure.marching_cubes_lewiner(volume, 0)
+
+        axis_len = float(resolution - 1) / 2.0
+        vertex = (vertex - axis_len) / axis_len * 2
+        mesh = trimesh.Trimesh(vertices=vertex, faces=faces, vertex_normals=normals)
+        mesh.export(self.bbox_path)
+
+        return mesh
+
+    def update_pose(self, se3_refine):
+        assert len(self.poses) == se3_refine.weight.shape[0]
+        pose_refine = camera.Lie().se3_to_SE3(se3_refine.weight)
+        self.poses = camera.Pose().compose([pose_refine, self.poses_aruco])
+
+    def get_camera_matrix(self, idx):
+        pose = self.poses[idx]
+        K = self.intrinsics
+        pose = to_homo(pose)
+        R = torch.inverse(pose)
+        K_inverse = self.intrinsics_inv
+        return (R, K, pose, K_inverse)
+
+    def get_image_mask(self, idx):
+        assert idx < len(self.masks)
+
+        return self.masks[idx]
+
+    def __getitem__(self, index):
+        poses_gt = self.poses_gt[index]
+        poses_aruco = self.poses_aruco[index]
+        mask = self.masks[index]
+        K = self.intrinsics
+
+        return torch.LongTensor([index]), poses_gt, poses_aruco, K, mask
+
 
 
 if __name__ == "__main__":
