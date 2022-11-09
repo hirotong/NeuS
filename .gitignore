@@ -157,3 +157,5 @@ tmp
 
 *.out
 *.gz
+
+.vscode/sftp.json
