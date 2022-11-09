@@ -14,7 +14,8 @@ from tqdm import tqdm
 from pyhocon import ConfigFactory
 from models.dataset import Dataset
 from models.dataset_blender import Blender
-from models.fields import RenderingNetwork, SDFNetwork, SingleVarianceNetwork, NeRF
+from models.fields import RenderingNetwork, SingleVarianceNetwork, NeRF #SDFNetwork,
+from models.SIREN import SDFNetwork
 from models.renderer import NeuSRenderer
 
 

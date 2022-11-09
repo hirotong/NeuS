@@ -1,5 +1,5 @@
-#beetle_2_2_1_randomview
-#box_2_2_1_randomview
+beetle_2_2_1_randomview
+box_2_2_1_randomview
 butterfly_2_1_2_randomview
 coral2_2_2_2_randomview
 coral_2_2_2_randomview

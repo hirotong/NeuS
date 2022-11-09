@@ -2,9 +2,9 @@
 #SBATCH --job-name=neus
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=4
 #SBATCH --mem=40gb
-#SBATCH --time=50:00:00 
+#SBATCH --time=2:00:00 
 #SBATCH --gres=gpu:1    # Number of GPUs (per node)
 
 ##SBATCH --mail-type=ALL
@@ -16,12 +16,14 @@
  
 #The below is what you want to actually run/do
 
-echo "Dataset $1"
+echo "Dataset $1/withbox"
 
 echo "number of cores is $SLURM_NTASKS"
 echo "job name is $SLURM_JOB_NAME"
 module load miniconda3
 conda activate pytorch3d
-python exp_runner.py --conf confs/insect_use_white_bkgd_wmask_siren.conf --case $1 &&
-python exp_runner.py --conf confs/insect_use_white_bkgd_wmask_siren.conf --case $1 --mode validate_mesh -r 512
+python exp_runner.py --conf confs/insect_use_white_bkgd_wmask.conf --case $1/withbox --mode validate_mesh -r 512
+python exp_runner.py --conf confs/insect_use_white_bkgd_wmask.conf --case $1/wobox --mode validate_mesh -r 512
+python exp_runner.py --conf confs/insect_white_bkgd.conf --case $1/withbox --mode validate_mesh -r 512
+python exp_runner.py --conf confs/insect_white_bkgd.conf --case $1/wobox --mode validate_mesh -r 512
 sleep 120
