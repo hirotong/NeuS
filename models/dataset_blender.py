@@ -155,17 +155,17 @@ class Blender(Database):
         # transform from right-up-backward to right-down-forward
         self.transform = torch.Tensor([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
 
-    def _load_camera_model(self, camera_model):
+    # def _load_camera_model(self, camera_model):
 
-        model = RefineModel("./bbox/asymmetric_box.obj", None, self.n_images)
-        state_dict = torch.load(camera_model)
-        model.load_state_dict(state_dict, strict=False)
+    #     model = RefineModel("./bbox/asymmetric_box.obj", None, self.n_images)
+    #     state_dict = torch.load(camera_model)
+    #     model.load_state_dict(state_dict, strict=False)
 
-        self.scale = model.scale.detach()
-        colmap_poses = model.get_camera_poses().detach()
+    #     self.scale = model.scale.detach()
+    #     colmap_poses = model.get_camera_poses().detach()
 
-        # self.poses = colmap_poses.clone().to(self.device)
-        self.colmap_poses = colmap_poses.clone().to(self.device)
+    #     # self.poses = colmap_poses.clone().to(self.device)
+    #     self.colmap_poses = colmap_poses.clone().to(self.device)
 
     def gen_rays_at(self, img_idx, resolution_level=1):
         """
@@ -319,7 +319,7 @@ class Blender(Database):
 class Aruco(Database):
     def __init__(
         self,
-        root,
+        data_dir,
         camera_model=None,
         half_res=False,
         mode="train",
@@ -333,12 +333,12 @@ class Aruco(Database):
     ):
         super().__init__()
 
-        self.case = root.split(os.sep)[-2]
+        self.case = data_dir.split(os.sep)[-2]
         assert mode.lower() in ["train", "valid", "test"]
         self.mode = mode
         self.use_gt_pose = use_gt_pose
         self.half_res = half_res
-        self.root = os.path.expanduser(root)
+        self.root = os.path.expanduser(data_dir)
         self.device = torch.device(device=device)
         # self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
         self.scale = torch.tensor([1.0])
@@ -377,7 +377,7 @@ class Aruco(Database):
             self.poses = self.poses_gt
         else:
             self.poses = self.poses_aruco
-            
+        self.pose_all = self.poses
         if mesh_gt is not None:
             import trimesh
             try:
@@ -456,17 +456,17 @@ class Aruco(Database):
         # transform from right-up-backward to right-down-forward
         self.transform = torch.Tensor([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
 
-    def _load_camera_model(self, camera_model):
+    # def _load_camera_model(self, camera_model):
 
-        model = RefineModel("./bbox/asymmetric_box.obj", None, self.n_images)
-        state_dict = torch.load(camera_model)
-        model.load_state_dict(state_dict, strict=False)
+    #     model = RefineModel("./bbox/asymmetric_box.obj", None, self.n_images)
+    #     state_dict = torch.load(camera_model)
+    #     model.load_state_dict(state_dict, strict=False)
 
-        self.scale = model.scale.detach()
-        colmap_poses = model.get_camera_poses().detach()
+    #     self.scale = model.scale.detach()
+    #     colmap_poses = model.get_camera_poses().detach()
 
-        # self.poses = colmap_poses.clone().to(self.device)
-        self.colmap_poses = colmap_poses.clone().to(self.device)
+    #     # self.poses = colmap_poses.clone().to(self.device)
+    #     self.colmap_poses = colmap_poses.clone().to(self.device)
 
     def gen_rays_at(self, img_idx, resolution_level=1):
         """
