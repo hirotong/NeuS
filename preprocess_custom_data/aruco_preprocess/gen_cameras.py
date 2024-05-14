@@ -33,16 +33,16 @@ def convert_cameras(work_dir, crop_pixels):
 
         world_mat = intrinsic @ pose
         world_mat = world_mat.astype(np.float32)
-        cam_dict['camera_mat_{}'.format(i)] = intrinsic
-        cam_dict['camera_mat_inv_{}'.format(i)] = np.linalg.inv(intrinsic)
-        cam_dict['world_mat_{}'.format(i)] = world_mat
-        cam_dict['world_mat_inv_{}'.format(i)] = np.linalg.inv(world_mat)
+        cam_dict[f'camera_mat_{i}'] = intrinsic
+        cam_dict[f'camera_mat_inv_{i}'] = np.linalg.inv(intrinsic)
+        cam_dict[f'world_mat_{i}'] = world_mat
+        cam_dict[f'world_mat_inv_{i}'] = np.linalg.inv(world_mat)
 
     scale_mat = np.diag([1.0, 1.0, 1.0, 1.0]).astype(np.float32)
 
     for i in range(n_images):
-        cam_dict['scale_mat_{}'.format(i)] = scale_mat
-        cam_dict['scale_mat_inv_{}'.format(i)] = np.linalg.inv(scale_mat)
+        cam_dict[f'scale_mat_{i}'] = scale_mat
+        cam_dict[f'scale_mat_inv_{i}'] = np.linalg.inv(scale_mat)
 
     out_dir = os.path.join(work_dir, 'preprocessed')
     os.makedirs(out_dir, exist_ok=True)
